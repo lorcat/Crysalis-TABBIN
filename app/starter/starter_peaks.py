@@ -234,8 +234,16 @@ class Starter:
                 tc.read_file(path)
                 tc.mod_list_pixelmultiframe(path, group=group, radius=radius)
 
+                tpath = path
+                p = re.compile("(.*)\.tabbin", re.I)
+                m = p.match(path)
+                if m is not None:
+                    tpath = m.groups()[0]
+
                 with self.lock:
-                    self.set_output(f"File {path} was changed. Operation took {time.time()-ts:6.2f} s")
+                    self.set_output(f"""
+                    File {path} was changed. Operation took {time.time()-ts:6.2f} s<br/>
+                    rd t \"{tpath}\"""")
                     time.sleep(1)
 
             self.add_file(path)
