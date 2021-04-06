@@ -28,6 +28,9 @@ class Starter:
         self.int_cleanup_radius = None
         self.int_group = None
 
+        # message prefix
+        self.msg_prefix = None
+
         # last path
         self.last_path = None
 
@@ -143,9 +146,13 @@ class Starter:
                 self.lbl_statusline = HTML("")
                 display(self.lbl_statusline)
 
+            if self.msg_prefix is not None:
+                msg = self.msg_prefix + msg
+                self.msg_prefix = None
+
             self.lbl_statusline.value = f"<div class=''>{msg}</div>"
 
-    def add_file(self, filepath, deleted=False):
+    def add_file(self, filepath, deleted=False, prefix=None):
         """
         Adds filepath and gui elements if non existent, fills them with data
         :param filepath:
@@ -166,9 +173,9 @@ class Starter:
                                     )
                 self.btn_process.on_click(self.process_peakfile)
                 self.int_cleanup_radius = BoundedIntText(
-                                    value=3,
+                                    value=7,
                                     min=1,
-                                    max=10,
+                                    max=20,
                                     step=1,
                                     description='Cleanup Radius:',
                                     disabled=False
@@ -186,6 +193,9 @@ class Starter:
 
                 display(self.lbl_path)
                 display(HBox([self.int_group, self.int_cleanup_radius, self.btn_process]))
+
+            if prefix is not None:
+                self.set_output(prefix)
 
             if self.last_path is not None:
                 if filepath in self.last_path and deleted:
@@ -210,7 +220,7 @@ class Starter:
             path = self.last_path
             self.btn_process.disabled = True
             radius = int(self.int_cleanup_radius.value)
-            group = int(self.int_cleanup_radius.value)
+            group = int(self.int_group.value)
 
         th = threading.Thread(target=self._process_peakfile, args=[path, radius, group])
         th.setDaemon(True)
@@ -225,25 +235,23 @@ class Starter:
         :return:
         """
         ts = time.time()
+        tmsg = None
         if self.last_path is not None and os.path.isfile(self.last_path):
             tc = None
             with self.lock:
                 tc = self.ctrl_crysalis.getTabbin(debug_mode=self.DEBUG_MODE)
 
             if tc is not None:
-                tc.read_file(path)
-                tc.mod_list_pixelmultiframe(path, group=group, radius=radius)
-
                 tpath = path
                 p = re.compile("(.*)\.tabbin", re.I)
                 m = p.match(path)
                 if m is not None:
                     tpath = m.groups()[0]
 
-                with self.lock:
-                    self.set_output(f"""
-                    File {path} was changed. Operation took {time.time()-ts:6.2f} s<br/>
-                    rd t \"{tpath}\"""")
-                    time.sleep(1)
+                tc.read_file(path)
+                self.msg_prefix = f"""File {path} was changed. Operation took {time.time() - ts:6.2f} s<br/>
+                                           rd t \"{tpath}\"<br/>"""
+
+                tc.mod_list_pixelmultiframe(path, group=group, radius=radius)
 
             self.add_file(path)

@@ -33,11 +33,8 @@ class TabbinAbstract(Tester):
     uintlist = (np.uint, np.uint8, np.uint16, np.uint32, np.uint64)
     floatlist = (np.float, np.float32, np.double)
 
-    def __init__(self, debug_mode=None, show_init=None):
+    def __init__(self, debug_mode=DEBUG, show_init=None):
         Tester.__init__(self, debug_mode=debug_mode, show_init=show_init)
-
-    def test_python_version_major(self):
-        return sys.version_info[0]
 
     def _get_value_from_binary(self, nptype, value):
         """
@@ -53,7 +50,10 @@ class TabbinAbstract(Tester):
             elif nptype in self.uintlist:
                 value = nptype(int.from_bytes(value, byteorder='little', signed=False))
             elif nptype in self.floatlist:
-                value = nptype(float.fromhex(value))
+                if len(value) == 8:
+                    value = nptype(struct.unpack("d", value)[0])
+                else:
+                    value = nptype(struct.unpack("f", value)[0])
             res = value
         except ValueError:
             self.error("Cannot convert data ({}) to np.type ({})".format(value, nptype))
@@ -122,8 +122,8 @@ class TabbinPoint(TabbinAbstract):
                                                     # OFFSET_DAPHTENDANGLESRAD: [104, [np.float32, np.float32, np.float32, np.float32, np.float32, np.float32,]]
                                                     # OFFSET_LCALCULATIONSTATUS: [152, np.uint32],
         OFFSET_UTWINGROUPFLAGS: [156, np.uint32],
-        OFFSET_DWRUNFRAME1BASED: [160, np.uint32],
-                                                    # OFFSET_DWFRAMESTAMP_OR_LO_RINGNUMBER_HI_FRAMEID: [164, np.uint32]
+        OFFSET_DWRUNFRAME1BASED: [160, np.int16],
+                                                    #OFFSET_DWFRAMESTAMP_OR_LO_RINGNUMBER_HI_FRAMEID: [164, np.uint32],
         OFFSET_GROUPKEY: [None, np.int8]            # dummy, no real sence, but convinient
     }
 
@@ -226,6 +226,38 @@ class TabbinPoint(TabbinAbstract):
         self._number = value
 
     @property
+    def dx(self):
+        key = OFFSET_DX
+        v = self._read_values(key)
+        if v is not None:
+            v = v
+        return v
+
+    @property
+    def dy(self):
+        key = OFFSET_DY
+        v = self._read_values(key)
+        if v is not None:
+            v = v
+        return v
+
+    @property
+    def dz(self):
+        key = OFFSET_DZ
+        v = self._read_values(key)
+        if v is not None:
+            v = v
+        return v
+
+    @property
+    def dlength(self):
+        key = OFFSET_DLENGTH
+        v = self._read_values(key)
+        if v is not None:
+            v = v
+        return v
+
+    @property
     def px(self):
         key = OFFSET_IXPIX
         v = self._read_values(key)
@@ -247,6 +279,14 @@ class TabbinPoint(TabbinAbstract):
         v = self._read_values(key)
         if v is not None:
             v = v + 1
+        return v
+
+    @property
+    def frame(self):
+        key = OFFSET_DWRUNFRAME1BASED
+        v = self._read_values(key)
+        if v is not None:
+            v = v
         return v
 
     @property
@@ -316,7 +356,7 @@ class CrysalisTabbinController(TabbinAbstract):
         # fixed offsets
         OFFSET_POINT_LIST: 312,  # 0x138 - fixed
         OFFSET_POINT_LISTNEXT: 168,
-        OFFSET_GROUPSTART: 806,  # fixed with rescpect to the OFFSET_GROUP_LIST start of the group value for a point
+        OFFSET_GROUPSTART: 806,  # fixed with respect to the OFFSET_GROUP_LIST start of the group value for a point
         OFFSET_GROUPNEXT: 32,  # repetition of the group value for the point
     }
 
@@ -339,6 +379,12 @@ class CrysalisTabbinController(TabbinAbstract):
         # points xy
         self.points_xy = {}
         self.points_xy_ref = {}
+
+        # points for the x and y direction
+        self.points_framey = {}
+        self.points_framey_ref = {}
+        self.points_framex = {}
+        self.points_framex_ref = {}
 
         # 2D representation of the detector
         self.nparray = None
@@ -448,16 +494,41 @@ class CrysalisTabbinController(TabbinAbstract):
                 # calculate statistics
                 tpx = point.px
                 tpy = point.py
+                tframe = point.frame
 
                 # binning if needed
                 tbpx = int(binning*round(float(tpx)/binning))
                 tbpy = int(binning*round(float(tpy)/binning))
+
+                if tbpx > self.nparray.shape[0] or tbpy > self.nparray.shape[1]:
+                    self.error("Some size is wrong ( x: {}) or ( y: {})".format(tbpx, tbpy))
+                    continue
 
                 txy = "{} {}".format(tbpx, tbpy)
                 if not txy in self.points_xy.keys():
                     self.points_xy.setdefault(txy, 1)
                 else:
                     self.points_xy[txy] += 1
+
+                # Y projection
+                tframey = "{}+{}".format(tframe, tbpy)
+                if not tframey in self.points_framey.keys():
+                    self.points_framey.setdefault(tframey, 1)
+                    self.points_framey_ref.setdefault(tframey, [])
+                    self.points_framey_ref[tframey].append(point)
+                else:
+                    self.points_framey[tframey] += 1
+                    self.points_framey_ref[tframey].append(point)
+
+                # X projection
+                tframex = "{}+{}".format(tframe, tbpx)
+                if not tframex in self.points_framex.keys():
+                    self.points_framex.setdefault(tframex, 1)
+                    self.points_framex_ref.setdefault(tframex, [])
+                    self.points_framex_ref[tframex].append(point)
+                else:
+                    self.points_framex[tframex] += 1
+                    self.points_framex_ref[tframex].append(point)
 
                 # creating a reference layout for the pixels
                 if self.nparray[tbpx, tbpy] is None:
@@ -470,7 +541,7 @@ class CrysalisTabbinController(TabbinAbstract):
                 # add a reference for stats
                 self.points_xy_ref.setdefault(point, [tpx, tpy, tbpx, tbpy])
 
-    def mod_list_pixelmultiframe(self, path, group=None, radius=20.):
+    def mod_list_pixelmultiframe(self, path, group=None, radius=20., frame_threshold=7):
         """
         Returns a list of references where frames have pixels at the same spot
         :return:
@@ -491,6 +562,7 @@ class CrysalisTabbinController(TabbinAbstract):
         times = []
         tellist = []
 
+        # filter diamonds appearing in different frames
         for el in tlist_short:
             tprep = time.time()
             elposx, elposy = self.points_xy_ref[el][0], self.points_xy_ref[el][1]
@@ -512,7 +584,19 @@ class CrysalisTabbinController(TabbinAbstract):
 
             times.append(time.time()-tprep)
 
-        self.info("Group was changed ({}) times".format(tlist_short[0].getGroupChanged()))
+        # filter diamonds creating stripes either in horizontal or vertical direction
+        for vs in self.points_framey_ref.values():
+            if( len(vs) > frame_threshold):
+                for el in vs:
+                    el.setGroup(group)
+
+        for vs in self.points_framex_ref.values():
+            if( len(vs) > frame_threshold):
+                for el in vs:
+                    el.setGroup(group)
+
+        if len(tlist_short) > 0:
+            self.info("Group was changed ({}) times".format(tlist_short[0].getGroupChanged()))
 
         self.debug("Converted {}".format(["--- {} {} {}".format(item.number, item.px, item.py) for sublist in tellist for item in sublist]))
 
@@ -594,16 +678,9 @@ class CrysalisTabbinController(TabbinAbstract):
         res = None
         try:
             if nptype in self.intlist:
-                if self.test_python_version_major() == 2:
-                    value = self.info(struct.unpack("<i", value))
-                elif self.test_python_version_major() == 3:
-                    value = nptype(int.from_bytes(value, byteorder='little', signed=True))
+                value = nptype(int.from_bytes(value, byteorder='little', signed=True))
             elif nptype in self.uintlist:
-                if self.test_python_version_major() == 2:
-                    value = self.info(struct.unpack("<i", value))
-                elif self.test_python_version_major() == 3:
-                    self.info(f"{nptype}")
-                    value = nptype(int.from_bytes(value, byteorder='little', signed=False))
+                value = nptype(int.from_bytes(value, byteorder='little', signed=False))
             elif nptype in self.floatlist:
                 value = nptype(float.fromhex(value))
             res = value
