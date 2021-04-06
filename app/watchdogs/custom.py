@@ -28,7 +28,7 @@ class CustomFileEventHandler(FileSystemEventHandler):
         super(CustomFileEventHandler, self).on_created(event)
 
         what = 'directory' if event.is_directory else 'file'
-        logging.info("Created %s: %s", what, event.src_path)
+        #logging.info("Created %s: %s", what, event.src_path)
 
         fn = self._proc_file(event.src_path)
 
@@ -41,7 +41,7 @@ class CustomFileEventHandler(FileSystemEventHandler):
         super(CustomFileEventHandler, self).on_deleted(event)
 
         what = 'directory' if event.is_directory else 'file'
-        logging.info("Deleted %s: %s", what, event.src_path)
+        #logging.info("Deleted %s: %s", what, event.src_path)
 
         fn = self._proc_file(event.src_path)
 
@@ -54,7 +54,7 @@ class CustomFileEventHandler(FileSystemEventHandler):
         super(CustomFileEventHandler, self).on_modified(event)
 
         what = 'directory' if event.is_directory else 'file'
-        logging.info("Modified %s: %s", what, event.src_path)
+        #logging.info("Modified %s: %s", what, event.src_path)
 
         fn = self._proc_file(event.src_path)
 
