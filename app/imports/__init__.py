@@ -11,7 +11,6 @@ from queue import Queue, Empty
 
 from IPython.display import display
 from ipywidgets import Button, Layout, Textarea, HBox, VBox, FileUpload, Output, Label, GridBox, HTML, BoundedIntText
-h1 = HTML()
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, LoggingEventHandler
@@ -24,3 +23,5 @@ from .keys import *
 
 import plotly.graph_objects as go
 from scipy.spatial.transform import Rotation as R
+
+import pyperclip as pc

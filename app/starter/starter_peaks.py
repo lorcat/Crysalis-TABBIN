@@ -21,15 +21,13 @@ class Starter:
         self.output = None
         self.output_lock = threading.Lock()
         self.lbl_statusline = None
+        self.lbl_clean_status = None
 
         # path and process button
         self.btn_process = None
         self.lbl_path = None
         self.int_cleanup_radius = None
         self.int_group = None
-
-        # message prefix
-        self.msg_prefix = None
 
         # last path
         self.last_path = None
@@ -83,7 +81,13 @@ class Starter:
         self.output = Output()
 
         display(self.lbl_status)
+
+        self.lbl_clean_status = HTML("")
+        display(self.lbl_clean_status)
+
         display(self.output)
+
+
 
     def start_watchdog(self):
         """
@@ -146,11 +150,32 @@ class Starter:
                 self.lbl_statusline = HTML("")
                 display(self.lbl_statusline)
 
-            if self.msg_prefix is not None:
-                msg = self.msg_prefix + msg
-                self.msg_prefix = None
-
             self.lbl_statusline.value = f"<div class=''>{msg}</div>"
+
+    def set_output_cleaning(self, tmsg):
+        """
+        Sets message which is cleaned after certain time
+        :param tmsg:
+        :return:
+        """
+        with self.lock:
+            self.lbl_clean_status.value = f"<div>{tmsg}</div>"
+
+        if len(tmsg) > 0:
+            th = threading.Thread(target=self.clean_output_cleaning, args=[])
+            th.setDaemon(True)
+            th.start()
+
+    def clean_output_cleaning(self, delay=10):
+        """
+        Cleaning the status message
+        :param delay:
+        :return:
+        """
+        for i in range(delay):
+            time.sleep(1)
+
+        self.set_output_cleaning("")
 
     def add_file(self, filepath, deleted=False, prefix=None):
         """
@@ -249,9 +274,14 @@ class Starter:
                     tpath = m.groups()[0]
 
                 tc.read_file(path)
-                self.msg_prefix = f"""File {path} was changed. Operation took {time.time() - ts:6.2f} s<br/>
-                                           rd t \"{tpath}\"<br/>"""
 
-                tc.mod_list_pixelmultiframe(path, group=group, radius=radius)
+                rd_t = f"rd t \"{tpath}\""
+
+                msg_prefix = f"""File {path} was changed. Operation took {time.time() - ts:6.2f} s<br/>
+                                           {rd_t}<br/>"""
+                pc.copy(rd_t)
+                tc.mod_list_pixelmultiframe(path, group=group, radius=radius, frame_threshold=7)
+
+                self.set_output_cleaning(msg_prefix)
 
             self.add_file(path)
